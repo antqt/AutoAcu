@@ -135,10 +135,13 @@ def main():
     max_thread = MAX_THREAD
     if os.path.exists(stack_file):
         running_threads = readFile(stack_file)
-
+        remove_threads=[]
         for thread in running_threads:
             if (isScanComplete(thread)):
-                running_threads.remove(thread)
+                remove_threads.append(thread)
+        
+        for thread in remove_threads:
+            running_threads.remove(thread)
 
         running_threads_number = len(running_threads)
         if(running_threads_number == MAX_THREAD):
