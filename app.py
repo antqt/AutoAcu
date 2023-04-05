@@ -109,8 +109,8 @@ def readFile(filename):
     return [string.strip('\n') for string in strings]
 
 
-def configScan(target_id, mode):
-    response = configTarget(SERVER, target_id,mode)
+def configScan(target_id, mode,headers):
+    response = configTarget(SERVER, target_id,mode,headers)
     return response
 
 
