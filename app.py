@@ -60,7 +60,7 @@ def scanTarget(hostname, target_id):
     return response
 
 
-def configTarget(hostname, target_id, scan_speed):
+def configTarget(hostname, target_id, scan_speed,custom_headers=[]):
     url = "{}/api/v1/targets/{}/configuration".format(hostname, target_id)
     body = {
         "description": "Target configuration default values",
@@ -82,7 +82,7 @@ def configTarget(hostname, target_id, scan_speed):
         "scan_speed": scan_speed,
         "case_sensitive": "auto",
         "technologies": [],
-        "custom_headers": [],
+        "custom_headers": custom_headers,
         "custom_cookies": [],
         "excluded_paths": [],
         "user_agent": "",
@@ -109,29 +109,49 @@ def readFile(filename):
     return [string.strip('\n') for string in strings]
 
 
-def slowdownScan(target_id, mode):
-    response = configTarget(HOST, target_id,mode)
+def configScan(target_id, mode):
+    response = configTarget(SERVER, target_id,mode)
     return response
 
 
-def createTargetAndScan(target_url, mode="fast"):
-    target_id = createTarget(HOST, target_url)["target_id"]
-    if (mode != "fast"):
-        slowdownScan(target_id, mode)
-    scan_id = scanTarget(HOST, target_id)["scan_id"]
+def createTargetAndScan(target_url, mode="fast", headers=[]):
+    target_id = createTarget(SERVER, target_url)["target_id"]
+    #config target
+    if (mode != "fast" or headers!=[]):
+        configScan(target_id, mode,headers)
+    scan_id = scanTarget(SERVER, target_id)["scan_id"]
     return scan_id
 
 
 def isScanComplete(scan_id):
-    result = getScan(HOST, scan_id)["current_session"]["status"]
+    result = getScan(SERVER, scan_id)["current_session"]["status"]
     if (result == "processing"):
         return False
     return True
 
+def getAddress(scan_id):
+    result = getScan(SERVER, scan_id)["target"]["address"]
+    return result
+
+def getSeverity(scan_id):
+    result = getScan(SERVER, scan_id)["current_session"]["severity_counts"]
+    if(result['high']>=1):
+        return 'high'
+    elif(result['medium']>=1):
+        return 'medium'
+    elif(result['low']>=1):
+        return 'low'
+    return 'safe'
+
+def writeAppend(filename, string):
+    file = open(filename, 'a')
+    file.write(string+'\n')
+    file.close()
 
 def main():
     running_threads = []
     stack_file = "AutoAcu_stacks_running"
+    severity_file = 'Severities.txt'
     max_thread = MAX_THREAD
     if os.path.exists(stack_file):
         running_threads = readFile(stack_file)
@@ -141,6 +161,7 @@ def main():
                 remove_threads.append(thread)
         
         for thread in remove_threads:
+            writeAppend(severity_file,getAddress(thread)+':'+getSeverity(thread))
             running_threads.remove(thread)
 
         running_threads_number = len(running_threads)
@@ -155,42 +176,46 @@ def main():
         exit()
 
     for target in targets[:max_thread]:
-        thread = createTargetAndScan(target,SPEED)
+        thread = createTargetAndScan(target,SPEED,HEADERS)
         running_threads.append(thread)
     writeToFile(stack_file, running_threads)
     writeToFile(TARGET_LIST, targets[max_thread:])
+
 def getArgs():
     parser = argparse.ArgumentParser(description='Make the automatic task more automatic.')
     parser.add_argument('urls_file',metavar="URLs_File", type=argparse.FileType('r'),help='List of urls')
     parser.add_argument('--threads', type=int, default=3, help='Number of tasks that run simultaneously.')
     parser.add_argument("--speed", default="fast",help='The speed of the scan.')
-    parser.add_argument("--host", default="https://localhost:13443",help='The host of the acunetix.')
-
+    parser.add_argument("--host", default="https://localhost:3443",help='The host of the acunetix.')
+    parser.add_argument("--header", action="append",default=[],help='Add 1 custom header')
 
     args = parser.parse_args()
     return args
+
 def setGlobal(args):
     global TARGET_LIST
     global MAX_THREAD
-    global HOST
+    global SERVER
     global SPEED
+    global HEADERS
     threads = args.threads
     target_file=args.urls_file.name
     host=args.host
     speed = args.speed
+    headers=args.header
     if(speed != "fast" and speed != "moderate"and speed != "slow"and speed != "sequential"):
         print("Wrong speed!")
         exit()
     
     TARGET_LIST = target_file
     MAX_THREAD = threads
-    HOST = host
+    SERVER = host
     SPEED = speed
+    HEADERS=headers
 
 
 
 if __name__ == "__main__":
-   
     args = getArgs()
     setGlobal(args)
     print("""Script running...
