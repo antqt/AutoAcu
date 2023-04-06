@@ -161,7 +161,7 @@ def main():
                 remove_threads.append(thread)
         
         for thread in remove_threads:
-            writeAppend(severity_file,getAddress(thread)+':'+getSeverity(thread))
+            # writeAppend(severity_file,getAddress(thread)+':'+getSeverity(thread))
             running_threads.remove(thread)
 
         running_threads_number = len(running_threads)
