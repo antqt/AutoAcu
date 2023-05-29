@@ -92,6 +92,15 @@ def configTarget(hostname, target_id, scan_speed,custom_headers=[]):
         url, json=body, headers=header, verify=False).status_code
     return response
 
+def configContinuousScan(hostname, target_id,mode):
+    url = "{}/api/v1/targets/{}/continuous_scan".format(hostname, target_id)
+    body = {
+    "enabled": mode
+    }
+    response = session.post(
+        url,json=body, headers=header, verify=False).status_code
+    return response
+
 #######################################################################
 # User
 
@@ -119,6 +128,8 @@ def createTargetAndScan(target_url, mode="fast", headers=[]):
     #config target
     if (mode != "fast" or headers!=[]):
         configScan(target_id, mode,headers)
+    if (CONTINUOUS):
+        configContinuousScan(SERVER, target_id,True)
     scan_id = scanTarget(SERVER, target_id)["scan_id"]
     return scan_id
 
@@ -151,7 +162,6 @@ def writeAppend(filename, string):
 def main():
     running_threads = []
     stack_file = "AutoAcu_stacks_running"
-    severity_file = 'Severities.txt'
     max_thread = MAX_THREAD
     if os.path.exists(stack_file):
         running_threads = readFile(stack_file)
@@ -161,7 +171,6 @@ def main():
                 remove_threads.append(thread)
         
         for thread in remove_threads:
-            # writeAppend(severity_file,getAddress(thread)+':'+getSeverity(thread))
             running_threads.remove(thread)
 
         running_threads_number = len(running_threads)
@@ -187,7 +196,8 @@ def getArgs():
     parser.add_argument('--threads', type=int, default=3, help='Number of tasks that run simultaneously.')
     parser.add_argument("--speed", default="fast",help='The speed of the scan.')
     parser.add_argument("--host", default="https://localhost:3443",help='The host of the acunetix.')
-    parser.add_argument("--header", action="append",default=[],help='Add 1 custom header')
+    parser.add_argument("--header", action="append",default=[],help='Add 1 custom header.')
+    parser.add_argument("--continuous", default=False,help="Turn on continuous scan.")
 
     args = parser.parse_args()
     return args
@@ -198,11 +208,15 @@ def setGlobal(args):
     global SERVER
     global SPEED
     global HEADERS
+    global CONTINUOUS
     threads = args.threads
     target_file=args.urls_file.name
     host=args.host
     speed = args.speed
     headers=args.header
+    
+    CONTINUOUS=args.continuous
+
     if(speed != "fast" and speed != "moderate"and speed != "slow"and speed != "sequential"):
         print("Wrong speed!")
         exit()
