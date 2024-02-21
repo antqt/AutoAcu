@@ -92,15 +92,23 @@ def configTarget(hostname, target_id, scan_speed,custom_headers=[]):
         url, json=body, headers=header, verify=False).status_code
     return response
 
-def configContinuousScan(hostname, target_id,mode):
-    url = "{}/api/v1/targets/{}/continuous_scan".format(hostname, target_id)
+# def configContinuousScan(hostname, target_id,mode):
+#     url = "{}/api/v1/targets/{}/continuous_scan".format(hostname, target_id)
+#     body = {
+#     "enabled": mode
+#     }
+#     response = session.post(
+#         url,json=body, headers=header, verify=False).status_code
+#     return response
+def getUploadURL(hostname, target_id,filename,filesize):
+    url = "{}/api/v1/targets/{}/configuration/imports".format(hostname, target_id)
     body = {
-    "enabled": mode
+        "name": filename,
+        "size": filesize
     }
     response = session.post(
-        url,json=body, headers=header, verify=False).status_code
-    return response
-
+        url, json=body, headers=header, verify=False).json()
+    return response["upload_url"]
 #######################################################################
 # User
 
@@ -128,8 +136,13 @@ def createTargetAndScan(target_url, mode="fast", headers=[]):
     #config target
     if (mode != "fast" or headers!=[]):
         configScan(target_id, mode,headers)
-    if (CONTINUOUS):
-        configContinuousScan(SERVER, target_id,True)
+    domain = getDomain(target_url)
+    slash ="" if WAYMORE_DIR[-1] =="/" else "/"
+    waymore_file=WAYMORE_DIR+slash+domain+"/waymore.txt"
+    print("[DEBUG]:",waymore_file)
+    if(WAYMORE_DIR!= "" and os.path.exists(waymore_file)):
+        uploadFileToServer(target_id,waymore_file)
+        print("[DEBUG]: UPLOADED")
     scan_id = scanTarget(SERVER, target_id)["scan_id"]
     return scan_id
 
@@ -144,20 +157,45 @@ def getAddress(scan_id):
     result = getScan(SERVER, scan_id)["target"]["address"]
     return result
 
-def getSeverity(scan_id):
-    result = getScan(SERVER, scan_id)["current_session"]["severity_counts"]
-    if(result['high']>=1):
-        return 'high'
-    elif(result['medium']>=1):
-        return 'medium'
-    elif(result['low']>=1):
-        return 'low'
-    return 'safe'
-
 def writeAppend(filename, string):
     file = open(filename, 'a')
     file.write(string+'\n')
     file.close()
+
+def uploadFileToServer(target_id,file_location):
+    file_size = os.path.getsize(file_location)
+    file_name = os.path.basename(file_location)
+    upload_url = SERVER + getUploadURL(SERVER,target_id,file_name,file_size)
+    headers = {'Content-Type': 'application/octet-stream','Content-Disposition': 'attachment; filename="'+file_name+'"'}
+    
+    # proxies = {'http':'http://192.168.9.212:8081/','https':'http://192.168.9.212:8081/'}
+    
+    chunk_size = 1048576
+    with open(file_location,'rb') as file:
+        start_byte = 0
+        while True:
+            chunk = file.read(chunk_size)
+            end_byte = start_byte + chunk_size
+            if(end_byte>file_size):end_byte=file_size 
+            if not chunk:
+                break  # End of file
+            headers.update({"Content-Range":"bytes "+str(start_byte)+"-"+str(end_byte - 1)+"/"+str(file_size)})
+            # Send the POST request
+            response = requests.post(upload_url, data=chunk, headers=headers,verify=False)
+
+            # Check if the request was successful
+            if response.status_code != 201 and response.status_code != 202 and response.status_code != 204:
+                print(f"Failed to upload chunk ({file.tell()} bytes): {response.text}")
+                return False
+
+            start_byte = end_byte        
+        
+    return True
+        
+def getDomain(url):
+    parsed_url = urlparse(url)
+    return parsed_url.netloc
+
 
 def main():
     running_threads = []
@@ -195,9 +233,9 @@ def getArgs():
     parser.add_argument('urls_file',metavar="URLs_File", type=argparse.FileType('r'),help='List of urls')
     parser.add_argument('--threads', type=int, default=3, help='Number of tasks that run simultaneously.')
     parser.add_argument("--speed", default="fast",help='The speed of the scan.')
-    parser.add_argument("--host", default="https://localhost:3443",help='The host of the acunetix.')
+    parser.add_argument("--host", default="https://localhost:13443",help='The host of the acunetix.')
     parser.add_argument("--header", action="append",default=[],help='Add 1 custom header.')
-    parser.add_argument("--continuous", default=False,help="Turn on continuous scan.")
+    parser.add_argument("--waymore_dir",metavar="waymore_dir",help='API crawler\'s result directory.')
 
     args = parser.parse_args()
     return args
@@ -208,14 +246,14 @@ def setGlobal(args):
     global SERVER
     global SPEED
     global HEADERS
-    global CONTINUOUS
+    global WAYMORE_DIR
+
     threads = args.threads
     target_file=args.urls_file.name
     host=args.host
     speed = args.speed
     headers=args.header
-    
-    CONTINUOUS=args.continuous
+    waymore_dir = args.waymore_dir
 
     if(speed != "fast" and speed != "moderate"and speed != "slow"and speed != "sequential"):
         print("Wrong speed!")
@@ -226,6 +264,7 @@ def setGlobal(args):
     SERVER = host
     SPEED = speed
     HEADERS=headers
+    WAYMORE_DIR = waymore_dir
 
 
 
