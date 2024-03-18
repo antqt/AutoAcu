@@ -1,6 +1,7 @@
 from pydoc import resolve
 import string
 from urllib import response
+from urllib.parse import urlparse
 import requests
 import os
 from dotenv import load_dotenv
@@ -137,12 +138,13 @@ def createTargetAndScan(target_url, mode="fast", headers=[]):
     if (mode != "fast" or headers!=[]):
         configScan(target_id, mode,headers)
     domain = getDomain(target_url)
-    slash ="" if WAYMORE_DIR[-1] =="/" else "/"
-    waymore_file=WAYMORE_DIR+slash+domain+"/waymore.txt"
-    print("[DEBUG]:",waymore_file)
-    if(WAYMORE_DIR!= "" and os.path.exists(waymore_file)):
-        uploadFileToServer(target_id,waymore_file)
-        print("[DEBUG]: UPLOADED")
+    if(WAYMORE_DIR):
+        slash ="" if WAYMORE_DIR[-1] =="/" else "/"
+        waymore_file=WAYMORE_DIR+slash+domain+"/waymore.txt"
+        print("[DEBUG]:",waymore_file)
+        if(WAYMORE_DIR!= "" and os.path.exists(waymore_file)):
+            uploadFileToServer(target_id,waymore_file)
+            print("[DEBUG]: UPLOADED")
     scan_id = scanTarget(SERVER, target_id)["scan_id"]
     return scan_id
 
